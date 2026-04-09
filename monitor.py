@@ -202,20 +202,57 @@ def send_pushover(
         r.raise_for_status()
 
 
-def send_startup_ping(user_key: str, api_token: str) -> None:
+def _notify_timezone(notify_cfg: dict[str, Any]) -> ZoneInfo:
+    ws = notify_cfg.get("weekly_status")
+    name = "Europe/Zurich"
+    if isinstance(ws, dict) and ws.get("timezone"):
+        name = str(ws["timezone"])
+    try:
+        return ZoneInfo(name)
+    except Exception:
+        return ZoneInfo("Europe/Zurich")
+
+
+def format_compact_check_summary(results: list[CheckResult]) -> str:
+    ok_n = sum(1 for r in results if r.ok)
+    fail_n = len(results) - ok_n
+    lines = [f"Checks: {len(results)} · OK: {ok_n} · Fehler: {fail_n}"]
+    if fail_n == 0:
+        lines.append("Alle Checks bestanden.")
+    else:
+        lines.append("Fehlgeschlagen:")
+        for r in results:
+            if not r.ok:
+                lines.append(f"• {r.name}: {(r.detail or '')[:100]}")
+    return "\n".join(lines)
+
+
+def send_startup_status(
+    user_key: str,
+    api_token: str,
+    results: list[CheckResult] | None,
+    notify_cfg: dict[str, Any],
+) -> None:
+    """Push beim Start: Host/Zeit + optional alle Check-Ergebnisse (max. Pushover-Länge)."""
     host = socket.gethostname()
     try:
         fqdn = socket.getfqdn()
     except OSError:
         fqdn = host
-    when = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %Z")
-    msg = (
-        f"WebpageWatcher ist gestartet.\n"
-        f"Host: {host}\n"
-        f"FQDN: {fqdn}\n"
-        f"Zeit: {when}\n"
-        f"Pushover-Verbindung funktioniert."
-    )
+    tz = _notify_timezone(notify_cfg)
+    now_tz = datetime.now(tz)
+    when = now_tz.strftime("%Y-%m-%d %H:%M %Z")
+    parts = [
+        f"Host: {host}",
+        f"FQDN: {fqdn}",
+        f"Zeit: {when}",
+        "",
+    ]
+    if results is not None:
+        parts.append(format_compact_check_summary(results))
+    else:
+        parts.append("Nur Verbindungstest (keine Seiten-Checks).")
+    msg = "\n".join(parts)[:1024]
     send_pushover(user_key, api_token, "WebpageWatcher · Start", msg)
 
 
@@ -556,7 +593,7 @@ def main() -> int:
     parser.add_argument(
         "--startup-ping",
         action="store_true",
-        help="Nur eine Pushover-Testnachricht senden und beenden (keine Seiten-Checks).",
+        help="Alle Checks einmal ausführen, Pushover-Startmeldung mit Status senden, beenden.",
     )
     args = parser.parse_args()
     config_path: Path = args.config
@@ -582,13 +619,24 @@ def main() -> int:
         )
         return 2
 
+    notify_cfg = config.get("notify") or {}
+
     if args.startup_ping:
         try:
-            send_startup_ping(user_key, api_token)
+            merge_pages_from_file(config, config_path)
+        except (FileNotFoundError, ValueError) as e:
+            print(str(e), file=sys.stderr)
+            return 2
+        results = run_checks(config)
+        try:
+            send_startup_status(user_key, api_token, results, notify_cfg)
         except httpx.HTTPError as e:
             print(f"Pushover (Startup): {e}", file=sys.stderr)
             return 1
-        print("Startup-Pushover gesendet.")
+        for r in results:
+            status = "OK " if r.ok else "FEHLER"
+            print(f"[{status}] {r.name}: {r.detail}")
+        print("Startup-Pushover mit Status gesendet.")
         return 0
 
     try:
@@ -599,15 +647,14 @@ def main() -> int:
 
     state_file = state_path_from_config(config, config_path)
     state = load_state(state_file)
-    notify_cfg = config.get("notify") or {}
+
+    results = run_checks(config)
 
     if notify_cfg.get("on_startup"):
         try:
-            send_startup_ping(user_key, api_token)
+            send_startup_status(user_key, api_token, results, notify_cfg)
         except httpx.HTTPError as e:
             print(f"Pushover (Startup): {e}", file=sys.stderr)
-
-    results = run_checks(config)
     messages, new_state = decide_notifications(results, state, notify_cfg)
     append_weekly_status_notification(messages, new_state, results, notify_cfg)
     save_state(state_file, new_state)

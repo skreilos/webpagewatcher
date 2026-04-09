@@ -12,8 +12,8 @@ notify:
   on_recovery: true
   # Erneute Meldung, solange der Check fehlschlägt (Minuten). 0 = nur bei Wechseln.
   repeat_failure_reminder_minutes: 180
-  # Bei jedem normalen Lauf (z. B. alle 15 Min) zusätzlich Startup-Push —
-  # bei Docker meist aus, dort kommt einmalig --startup-ping aus dem Image-CMD.
+  # Nach jedem Check-Lauf zusätzlich Start-Push mit Kurz-Status (Host + OK/Fehler).
+  # Docker nutzt stattdessen einmalig monitor.py --startup-ping im Container-CMD.
   on_startup: false
   # Sonntag morgen (Ortszeit): eine Zusammenfassung aller Checks — „Watcher lebt“
   weekly_status:
