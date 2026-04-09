@@ -14,7 +14,7 @@ import socket
 import subprocess
 import sys
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin
@@ -143,18 +143,32 @@ def state_path_from_config(config: dict[str, Any], config_file: Path) -> Path:
     return config_file.parent / "state.json"
 
 
-def load_state(path: Path) -> dict[str, str]:
+def load_state(path: Path) -> dict[str, Any]:
+    empty: dict[str, Any] = {"v": 2, "status": {}, "fail_push_at": {}}
     if not path.exists():
-        return {}
+        return empty
     try:
         with path.open(encoding="utf-8") as f:
             data = json.load(f)
-        return data if isinstance(data, dict) else {}
     except (json.JSONDecodeError, OSError):
-        return {}
+        return empty
+    if not isinstance(data, dict):
+        return empty
+    if data.get("v") == 2 and isinstance(data.get("status"), dict):
+        return {
+            "v": 2,
+            "status": dict(data["status"]),
+            "fail_push_at": dict(data.get("fail_push_at") or {}),
+        }
+    # Legacy: flach { "page:Name": "ok"|"fail", ... }
+    status: dict[str, str] = {}
+    for k, v in data.items():
+        if isinstance(v, str) and v in ("ok", "fail"):
+            status[str(k)] = v
+    return {"v": 2, "status": status, "fail_push_at": {}}
 
 
-def save_state(path: Path, state: dict[str, str]) -> None:
+def save_state(path: Path, state: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     with tmp.open("w", encoding="utf-8") as f:
@@ -339,62 +353,92 @@ def run_checks(config: dict[str, Any]) -> list[CheckResult]:
     return results
 
 
+def _parse_iso_utc(s: str) -> datetime:
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    return datetime.fromisoformat(s)
+
+
 def decide_notifications(
     results: list[CheckResult],
-    prev: dict[str, str],
+    state: dict[str, Any],
     notify_cfg: dict[str, Any],
-) -> tuple[list[tuple[str, str, int]], dict[str, str]]:
+) -> tuple[list[tuple[str, str, int]], dict[str, Any]]:
     """
-    Returns list of (title, message, priority) and new state map.
+    Returns list of (title, message, priority) and new state blob (v2).
     """
     on_failure = notify_cfg.get("on_failure", True)
     on_recovery = notify_cfg.get("on_recovery", True)
+    repeat_raw = notify_cfg.get("repeat_failure_reminder_minutes")
+    if repeat_raw is None:
+        repeat_mins = 180
+    else:
+        repeat_mins = max(0, int(repeat_raw))
+
+    now = datetime.now(timezone.utc)
+    prev = state.get("status") or {}
+    fail_push_at: dict[str, str] = dict(state.get("fail_push_at") or {})
+    new_status: dict[str, str] = dict(prev)
     out: list[tuple[str, str, int]] = []
-    new_state: dict[str, str] = dict(prev)
+
+    def mark_fail_push(key: str) -> None:
+        fail_push_at[key] = now.isoformat()
 
     for r in results:
         cur = "ok" if r.ok else "fail"
         old = prev.get(r.key)
-        new_state[r.key] = cur
+        new_status[r.key] = cur
+
+        if cur == "ok":
+            fail_push_at.pop(r.key, None)
 
         if old is None:
-            # Erster Lauf: bei Fehler sofort melden; bei OK nur Baseline speichern (kein Spam)
             if cur == "fail" and on_failure:
-                out.append(
-                    (
-                        f"Fehler: {r.name}",
-                        r.detail,
-                        1,
-                    )
-                )
+                out.append((f"Fehler: {r.name}", r.detail, 1))
+                mark_fail_push(r.key)
             continue
 
         if old == "ok" and cur == "fail" and on_failure:
-            out.append(
-                (
-                    f"Fehler: {r.name}",
-                    r.detail,
-                    1,
-                )
-            )
+            out.append((f"Fehler: {r.name}", r.detail, 1))
+            mark_fail_push(r.key)
         elif old == "fail" and cur == "ok" and on_recovery:
-            out.append(
-                (
-                    f"OK wieder: {r.name}",
-                    r.detail,
-                    0,
+            out.append((f"OK wieder: {r.name}", r.detail, 0))
+        elif (
+            old == "fail"
+            and cur == "fail"
+            and on_failure
+            and repeat_mins > 0
+        ):
+            last_s = fail_push_at.get(r.key)
+            if last_s is None:
+                # z. B. nach Upgrade: war schon fail, noch kein Zeitstempel → einmal melden
+                out.append(
+                    (f"Immer noch fehlgeschlagen: {r.name}", r.detail, 1)
                 )
-            )
+                mark_fail_push(r.key)
+            else:
+                try:
+                    elapsed = now - _parse_iso_utc(last_s)
+                    if elapsed >= timedelta(minutes=repeat_mins):
+                        out.append(
+                            (
+                                f"Immer noch fehlgeschlagen: {r.name}",
+                                r.detail,
+                                1,
+                            )
+                        )
+                        mark_fail_push(r.key)
+                except (ValueError, TypeError):
+                    mark_fail_push(r.key)
 
         if r.ok and r.push_on_success:
-            out.append(
-                (
-                    f"OK: {r.name}",
-                    r.detail,
-                    0,
-                )
-            )
+            out.append((f"OK: {r.name}", r.detail, 0))
 
+    new_state: dict[str, Any] = {
+        "v": 2,
+        "status": new_status,
+        "fail_push_at": fail_push_at,
+    }
     return out, new_state
 
 
@@ -452,7 +496,7 @@ def main() -> int:
         return 2
 
     state_file = state_path_from_config(config, config_path)
-    prev = load_state(state_file)
+    state = load_state(state_file)
     notify_cfg = config.get("notify") or {}
 
     if notify_cfg.get("on_startup"):
@@ -462,7 +506,7 @@ def main() -> int:
             print(f"Pushover (Startup): {e}", file=sys.stderr)
 
     results = run_checks(config)
-    messages, new_state = decide_notifications(results, prev, notify_cfg)
+    messages, new_state = decide_notifications(results, state, notify_cfg)
     save_state(state_file, new_state)
 
     for title, message, priority in messages:
