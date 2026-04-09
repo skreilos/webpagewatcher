@@ -11,6 +11,14 @@
 # Erbt von der übergeordneten Seite: expect_status, timeout_seconds, verify_tls
 
 pages:
+  # Immer erreichbar — prüft, ob der Monitor + Pushover-Lauf grundsätzlich funktioniert.
+  - name: "Selbsttest example.com"
+    url: "https://example.com/"
+    expect_status: 200
+    timeout_seconds: 20
+    expect_body_contains:
+      - "Example Domain"
+
   - name: "Coiffeur Nora"
     url: "https://coiffeurnora.ch/"
     expect_status: 200
@@ -33,33 +41,14 @@ pages:
       - name: "Kontakt"
         anchor: contact
 
+  # Seebadi: Seite derzeit oft mit falschem Inhalt / im Umbau.
+  # Nur „erreichbar + HTTP 200“ — keine Text- und Nav-Checks, bis die Site wieder stimmt.
+  # Später ergänzen: expect_body_contains + navigation (siehe Git-History commit vor Lockern).
   - name: "Seebadi Wollishofen"
-    # Öffentliche Startseite ist www (Apex leitet i. d. R. dorthin)
     url: "https://www.seebadiwollishofen.ch/"
     expect_status: 200
     timeout_seconds: 45
     verify_tls: false
-    expect_body_contains:
-      - "Seebadi Wollishofen"
-      - "Seerestaurant Badi Wollishofen"
-    navigation:
-      # Hauptmenü der Live-WordPress-Installation (www nach Redirect)
-      - name: "Menü (page 534)"
-        url: "https://www.seebadiwollishofen.ch/?page_id=534"
-        expect_body_contains:
-          - "Seebadi"
-      - name: "Menü (page 141)"
-        url: "https://www.seebadiwollishofen.ch/?page_id=141"
-        expect_body_contains:
-          - "Seebadi"
-      - name: "Menü (page 145)"
-        url: "https://www.seebadiwollishofen.ch/?page_id=145"
-        expect_body_contains:
-          - "Seebadi"
-      - name: "Menü (page 2)"
-        url: "https://www.seebadiwollishofen.ch/?page_id=2"
-        expect_body_contains:
-          - "Seebadi"
 
   - name: "Massagepraxis Zirbenkraft"
     url: "https://massagepraxis-zirbe.ch/"
