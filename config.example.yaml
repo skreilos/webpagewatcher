@@ -7,6 +7,7 @@ pushover:
   api_token: "YOUR_PUSHOVER_APP_TOKEN"
 
 notify:
+  # on_failure: auch beim allersten Lauf, wenn ein Check schon fehlschlägt
   on_failure: true
   on_recovery: true
   # Bei jedem normalen Lauf (z. B. alle 15 Min) zusätzlich Startup-Push —

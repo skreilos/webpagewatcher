@@ -358,7 +358,15 @@ def decide_notifications(
         new_state[r.key] = cur
 
         if old is None:
-            # Erster Lauf: keine Benachrichtigung, Zustand nur speichern
+            # Erster Lauf: bei Fehler sofort melden; bei OK nur Baseline speichern (kein Spam)
+            if cur == "fail" and on_failure:
+                out.append(
+                    (
+                        f"Fehler: {r.name}",
+                        r.detail,
+                        1,
+                    )
+                )
             continue
 
         if old == "ok" and cur == "fail" and on_failure:
