@@ -15,6 +15,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urljoin
 
 import httpx
 import yaml
@@ -83,6 +84,51 @@ def check_body_expectations(entry: dict[str, Any], text: str) -> tuple[bool, str
                 return False, f"Ungültiges Regex {pat!r}: {e}"
 
     return True, None
+
+
+def html_has_id_anchor(html: str, anchor: str) -> bool:
+    """True, wenn irgendwo id="<anchor>" (Groß/Kleinschreibung egal) vorkommt."""
+    want = anchor.lower()
+    for m in re.finditer(r'\bid\s*=\s*(["\'])([^"\']*)\1', html, re.IGNORECASE):
+        if m.group(2).lower() == want:
+            return True
+    return False
+
+
+def check_anchor_expectations(entry: dict[str, Any], html: str) -> tuple[bool, str | None]:
+    """anchor: ein id-Wert; anchors: Liste — alle müssen vorkommen."""
+    one = entry.get("anchor")
+    many = entry.get("anchors")
+    if many is not None:
+        ids = [many] if isinstance(many, str) else list(many)
+        for aid in ids:
+            if not html_has_id_anchor(html, str(aid)):
+                return False, f"Anker id={aid!r} fehlt im HTML"
+        return True, None
+    if one is not None:
+        if not html_has_id_anchor(html, str(one)):
+            return False, f"Anker id={one!r} fehlt im HTML"
+    return True, None
+
+
+def merge_nav_entry(parent: dict[str, Any], nav: dict[str, Any]) -> dict[str, Any]:
+    """Erbt verify_tls, timeout_seconds, expect_status von der übergeordneten Seite."""
+    out: dict[str, Any] = {}
+    for k in ("expect_status", "timeout_seconds", "verify_tls"):
+        if k in parent:
+            out[k] = parent[k]
+    out.update({k: v for k, v in nav.items() if k != "path"})
+    base = parent["url"]
+    if "url" in nav:
+        out["url"] = nav["url"]
+    elif "path" in nav:
+        out["url"] = urljoin(base, nav["path"])
+    else:
+        out["url"] = base
+    plabel = parent.get("name") or base
+    nlabel = nav.get("name", "Navigation")
+    out["name"] = f"{plabel} › {nlabel}"
+    return out
 
 
 def state_path_from_config(config: dict[str, Any], config_file: Path) -> Path:
@@ -163,6 +209,10 @@ def check_page(entry: dict[str, Any]) -> CheckResult:
         ok, err = check_body_expectations(entry, r.text)
         if not ok:
             return CheckResult(name, key, False, err or "Inhalt ungültig")
+
+    ok_a, err_a = check_anchor_expectations(entry, r.text)
+    if not ok_a:
+        return CheckResult(name, key, False, err_a or "Anker fehlt")
 
     return CheckResult(name, key, True, f"HTTP {r.status_code}")
 
@@ -245,7 +295,11 @@ def check_extra_ping(entry: dict[str, Any]) -> CheckResult:
 def run_checks(config: dict[str, Any]) -> list[CheckResult]:
     results: list[CheckResult] = []
     for p in config.get("pages") or []:
-        results.append(check_page(p))
+        nav_items = p.get("navigation") or []
+        main = {k: v for k, v in p.items() if k != "navigation"}
+        results.append(check_page(main))
+        for nav in nav_items:
+            results.append(check_page(merge_nav_entry(p, nav)))
 
     for e in config.get("extra_checks") or []:
         t = (e.get("type") or "http").lower()

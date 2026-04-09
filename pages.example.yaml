@@ -1,10 +1,13 @@
 # Kopieren nach pages.yaml (neben config.yaml). Nur Seiten — keine API-Keys.
 #
-# expect_body_contains: ein String ODER Liste — alle Teilstrings müssen in der
-# HTML-Antwort vorkommen (hilft bei WordPress, das 200 liefert aber falschen Inhalt).
+# expect_body_contains: ein String ODER Liste — alle Teilstrings müssen vorkommen.
 #
-# Seebadi: Marker aus der echten Site (Seerestaurant / Zürichsee). Wenn die Live-Seite
-# nach einem Hack anderen Text zeigt, schlägt der Check fehl — gewollt.
+# navigation: zusätzliche Checks pro Menüpunkt (gleiche Site).
+#   - Ohne url/path: gleiche URL wie die übergeordnete Seite (One-Pager mit Ankern).
+#   - anchor / anchors: HTML id= muss vorkommen (Groß/Kleinschreibung egal).
+#   - path: relativ zur url der übergeordneten Seite, z. B. /impressum/
+#   - url: absolute Adresse (z. B. Unterseiten bei WordPress ?page_id=…)
+# Erbt von der übergeordneten Seite: expect_status, timeout_seconds, verify_tls
 
 pages:
   - name: "Coiffeur Nora"
@@ -15,16 +18,46 @@ pages:
       - "Coiffeur Nora"
       - "Beromünster"
       - "Willkommen bei Coiffeur Nora"
+    navigation:
+      - name: "Über uns"
+        anchor: aboutus
+      - name: "Team"
+        anchor: stylists
+      - name: "Preise"
+        anchor: prices
+      - name: "Galerie"
+        anchor: gallery
+      - name: "Öffnungszeiten"
+        anchor: openingtimes
+      - name: "Kontakt"
+        anchor: contact
 
   - name: "Seebadi Wollishofen"
     url: "https://seebadiwollishofen.ch/"
     expect_status: 200
     timeout_seconds: 45
-    # Nur falls Zertifikat/Hostname noch nicht passen (Redirect auf www o. Ä.):
     verify_tls: false
     expect_body_contains:
       - "Seebadi Wollishofen"
       - "Seerestaurant Badi Wollishofen"
+    navigation:
+      # Hauptmenü der Live-WordPress-Installation (www nach Redirect)
+      - name: "Menü (page 534)"
+        url: "https://www.seebadiwollishofen.ch/?page_id=534"
+        expect_body_contains:
+          - "Seebadi"
+      - name: "Menü (page 141)"
+        url: "https://www.seebadiwollishofen.ch/?page_id=141"
+        expect_body_contains:
+          - "Seebadi"
+      - name: "Menü (page 145)"
+        url: "https://www.seebadiwollishofen.ch/?page_id=145"
+        expect_body_contains:
+          - "Seebadi"
+      - name: "Menü (page 2)"
+        url: "https://www.seebadiwollishofen.ch/?page_id=2"
+        expect_body_contains:
+          - "Seebadi"
 
   - name: "Massagepraxis Zirbenkraft"
     url: "https://massagepraxis-zirbe.ch/"
@@ -34,3 +67,21 @@ pages:
       - "Massagepraxis Zirbenkraft"
       - "Zirbenkraft"
       - "Chilematte"
+    navigation:
+      - name: "Was ist Zirbe"
+        anchor: Zirbe
+      - name: "Angebot"
+        anchor: Angebot
+      - name: "Über mich"
+        anchor: Team
+      - name: "Kontakt"
+        anchor: Kontakt
+      - name: "Impressum"
+        path: /impressum/
+        expect_body_contains:
+          - "Impressum"
+          - "Massagepraxis"
+      - name: "Datenschutz"
+        path: /datenschutzerklaerung-dse/
+        expect_body_contains:
+          - "Datenschutz"
