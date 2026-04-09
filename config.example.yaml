@@ -15,6 +15,14 @@ notify:
   # Bei jedem normalen Lauf (z. B. alle 15 Min) zusätzlich Startup-Push —
   # bei Docker meist aus, dort kommt einmalig --startup-ping aus dem Image-CMD.
   on_startup: false
+  # Sonntag morgen (Ortszeit): eine Zusammenfassung aller Checks — „Watcher lebt“
+  weekly_status:
+    enabled: true
+    weekday: sunday   # monday … sunday oder 0–6 (Python: Mo=0, So=6)
+    hour: 10
+    minute: 0
+    timezone: Europe/Zurich
+    window_minutes: 15   # z. B. 10:00–10:14; ein Lauf pro ISO-Kalenderwoche
 
 # Relativ zum Ordner von config.yaml (oder absolut)
 pages_file: pages.yaml

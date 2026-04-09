@@ -18,6 +18,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin
+from zoneinfo import ZoneInfo
 
 import httpx
 import yaml
@@ -155,11 +156,15 @@ def load_state(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         return empty
     if data.get("v") == 2 and isinstance(data.get("status"), dict):
-        return {
+        out: dict[str, Any] = {
             "v": 2,
             "status": dict(data["status"]),
             "fail_push_at": dict(data.get("fail_push_at") or {}),
         }
+        lw = data.get("last_weekly_status_week")
+        if isinstance(lw, str):
+            out["last_weekly_status_week"] = lw
+        return out
     # Legacy: flach { "page:Name": "ok"|"fail", ... }
     status: dict[str, str] = {}
     for k, v in data.items():
@@ -439,7 +444,104 @@ def decide_notifications(
         "status": new_status,
         "fail_push_at": fail_push_at,
     }
+    lw = state.get("last_weekly_status_week")
+    if isinstance(lw, str):
+        new_state["last_weekly_status_week"] = lw
     return out, new_state
+
+
+_WEEKDAY_NAMES: dict[str, int] = {
+    "monday": 0,
+    "tuesday": 1,
+    "wednesday": 2,
+    "thursday": 3,
+    "friday": 4,
+    "saturday": 5,
+    "sunday": 6,
+}
+
+
+def _parse_weekday(v: Any) -> int | None:
+    if v is None:
+        return None
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, int):
+        return int(v) % 7
+    if isinstance(v, str):
+        return _WEEKDAY_NAMES.get(v.strip().lower())
+    return None
+
+
+def _weekly_status_window_ok(
+    now_tz: datetime,
+    hour: int,
+    minute: int,
+    window_minutes: int,
+) -> bool:
+    start = now_tz.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    end = start + timedelta(minutes=max(1, window_minutes))
+    return start <= now_tz < end
+
+
+def format_weekly_status_message(results: list[CheckResult], now_tz: datetime) -> str:
+    ok_n = sum(1 for r in results if r.ok)
+    fail_n = len(results) - ok_n
+    y, iso_week, _ = now_tz.isocalendar()
+    tz_name = str(now_tz.tzinfo) if now_tz.tzinfo else ""
+    lines = [
+        f"Kalenderwoche {iso_week} ({y}), {now_tz.strftime('%d.%m.%Y %H:%M')}",
+        f"Zeitzone: {tz_name}",
+        f"Checks: {len(results)} · OK: {ok_n} · Fehler: {fail_n}",
+    ]
+    if fail_n == 0:
+        lines.append("Alle Checks bestanden — Watcher läuft.")
+    else:
+        lines.append("Fehlgeschlagen:")
+        for r in results:
+            if not r.ok:
+                d = (r.detail or "")[:120]
+                lines.append(f"• {r.name}: {d}")
+    return "\n".join(lines)[:1024]
+
+
+def append_weekly_status_notification(
+    messages: list[tuple[str, str, int]],
+    new_state: dict[str, Any],
+    results: list[CheckResult],
+    notify_cfg: dict[str, Any],
+) -> None:
+    """Hängt ggf. eine Wochenstatus-Pushover-Meldung an (mutiert messages + new_state)."""
+    ws = notify_cfg.get("weekly_status")
+    if not isinstance(ws, dict) or not ws.get("enabled"):
+        return
+    wd = _parse_weekday(ws.get("weekday", "sunday"))
+    if wd is None:
+        return
+    try:
+        hour = int(ws.get("hour", 10))
+        minute = int(ws.get("minute", 0))
+    except (TypeError, ValueError):
+        return
+    window = int(ws.get("window_minutes", 15))
+    window = max(1, min(window, 120))
+    tz_name = str(ws.get("timezone") or "Europe/Zurich")
+    try:
+        tz = ZoneInfo(tz_name)
+    except Exception:
+        tz = ZoneInfo("Europe/Zurich")
+    now_tz = datetime.now(tz)
+    if now_tz.weekday() != wd:
+        return
+    if not _weekly_status_window_ok(now_tz, hour, minute, window):
+        return
+    y, wk, _ = now_tz.isocalendar()
+    week_tag = f"{y}-W{wk:02d}"
+    if new_state.get("last_weekly_status_week") == week_tag:
+        return
+    body = format_weekly_status_message(results, now_tz)
+    messages.append(("WebpageWatcher · Wochenstatus", body, -1))
+    new_state["last_weekly_status_week"] = week_tag
 
 
 def main() -> int:
@@ -507,6 +609,7 @@ def main() -> int:
 
     results = run_checks(config)
     messages, new_state = decide_notifications(results, state, notify_cfg)
+    append_weekly_status_notification(messages, new_state, results, notify_cfg)
     save_state(state_file, new_state)
 
     for title, message, priority in messages:
