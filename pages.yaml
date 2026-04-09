@@ -41,14 +41,17 @@ pages:
       - name: "Kontakt"
         anchor: contact
 
-  # Seebadi: Seite derzeit oft mit falschem Inhalt / im Umbau.
-  # Nur „erreichbar + HTTP 200“ — keine Text- und Nav-Checks, bis die Site wieder stimmt.
-  # Später ergänzen: expect_body_contains + navigation (siehe Git-History commit vor Lockern).
+  # Seebadi: Stand 2026-04 — statische Teaser-Seite (nginx), kein WP-Menü.
+  # canonical: https://seebadiwollishofen.ch/ (www liefert dasselbe HTML)
+  # Bei Launch der vollen Site: Textmarker + navigation anpassen.
   - name: "Seebadi Wollishofen"
-    url: "https://www.seebadiwollishofen.ch/"
+    url: "https://seebadiwollishofen.ch/"
     expect_status: 200
     timeout_seconds: 45
-    verify_tls: false
+    expect_body_contains:
+      - "Seebadi Wollishofen"
+      - "Seerestaurant Badi Wollishofen"
+      - "Webauftritt wird gerade überarbeitet"
 
   - name: "Massagepraxis Zirbenkraft"
     url: "https://massagepraxis-zirbe.ch/"
