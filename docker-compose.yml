@@ -9,6 +9,7 @@ services:
       - watcher-data:/data
     environment:
       WEBPAGE_WATCHER_STATE_FILE: /data/state.json
+      WEBPAGE_WATCHER_INTERVAL_SECONDS: "900"
       # Optional statt Werte in config.yaml:
       # PUSHOVER_USER_KEY: ""
       # PUSHOVER_API_TOKEN: ""

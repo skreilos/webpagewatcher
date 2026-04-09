@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Webpage / connectivity monitoring with Pushover alerts.
-Designed for hourly runs via systemd timer.
+Designed for periodic runs (e.g. every 15 min via Docker or systemd).
 """
 
 from __future__ import annotations
@@ -272,7 +272,7 @@ def check_extra_http(entry: dict[str, Any]) -> CheckResult:
 def _push_on_success_flag(entry: dict[str, Any]) -> bool:
     if entry.get("push_on_success"):
         return True
-    # notify_when: success = bei jedem erfolgreichen Lauf Push (stündlich)
+    # notify_when: success = bei jedem erfolgreichen Lauf Push (je nach Intervall)
     return entry.get("notify_when") == "success"
 
 

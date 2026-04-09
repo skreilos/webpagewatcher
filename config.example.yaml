@@ -9,7 +9,7 @@ pushover:
 notify:
   on_failure: true
   on_recovery: true
-  # Bei jedem normalen Lauf (z. B. systemd stündlich) zusätzlich Startup-Push —
+  # Bei jedem normalen Lauf (z. B. alle 15 Min) zusätzlich Startup-Push —
   # bei Docker meist aus, dort kommt einmalig --startup-ping aus dem Image-CMD.
   on_startup: false
 

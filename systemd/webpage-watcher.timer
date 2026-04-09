@@ -1,8 +1,8 @@
 [Unit]
-Description=WebpageWatcher stündlich
+Description=WebpageWatcher alle 15 Minuten
 
 [Timer]
-OnCalendar=hourly
+OnCalendar=*-*-* *:00,15,30,45:00
 Persistent=true
 
 [Install]
