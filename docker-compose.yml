@@ -4,8 +4,8 @@ services:
     container_name: webpage-watcher
     restart: unless-stopped
     volumes:
-      # config.yaml aus diesem Verzeichnis anlegen (von config.example.yaml)
       - ./config.yaml:/app/config.yaml:ro
+      - ./pages.yaml:/app/pages.yaml:ro
       - watcher-data:/data
     environment:
       WEBPAGE_WATCHER_STATE_FILE: /data/state.json

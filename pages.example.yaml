@@ -1,0 +1,36 @@
+# Kopieren nach pages.yaml (neben config.yaml). Nur Seiten — keine API-Keys.
+#
+# expect_body_contains: ein String ODER Liste — alle Teilstrings müssen in der
+# HTML-Antwort vorkommen (hilft bei WordPress, das 200 liefert aber falschen Inhalt).
+#
+# Seebadi: Marker aus der echten Site (Seerestaurant / Zürichsee). Wenn die Live-Seite
+# nach einem Hack anderen Text zeigt, schlägt der Check fehl — gewollt.
+
+pages:
+  - name: "Coiffeur Nora"
+    url: "https://coiffeurnora.ch/"
+    expect_status: 200
+    timeout_seconds: 45
+    expect_body_contains:
+      - "Coiffeur Nora"
+      - "Beromünster"
+      - "Willkommen bei Coiffeur Nora"
+
+  - name: "Seebadi Wollishofen"
+    url: "https://seebadiwollishofen.ch/"
+    expect_status: 200
+    timeout_seconds: 45
+    # Nur falls Zertifikat/Hostname noch nicht passen (Redirect auf www o. Ä.):
+    verify_tls: false
+    expect_body_contains:
+      - "Seebadi Wollishofen"
+      - "Seerestaurant Badi Wollishofen"
+
+  - name: "Massagepraxis Zirbenkraft"
+    url: "https://massagepraxis-zirbe.ch/"
+    expect_status: 200
+    timeout_seconds: 45
+    expect_body_contains:
+      - "Massagepraxis Zirbenkraft"
+      - "Zirbenkraft"
+      - "Chilematte"

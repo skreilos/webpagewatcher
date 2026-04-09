@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -30,7 +31,58 @@ class CheckResult:
 
 def load_config(path: Path) -> dict[str, Any]:
     with path.open(encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        data = yaml.safe_load(f)
+    if data is None:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def merge_pages_from_file(config: dict[str, Any], config_path: Path) -> None:
+    """Lädt Seiten aus pages_file, falls gesetzt; sonst bleiben inline-pages."""
+    ref = config.get("pages_file")
+    if not ref:
+        return
+    pages_path = (config_path.parent / str(ref)).resolve()
+    if not pages_path.exists():
+        raise FileNotFoundError(
+            f"pages_file nicht gefunden: {pages_path} (gesetzt in {config_path})"
+        )
+    sub = load_config(pages_path)
+    pages = sub.get("pages")
+    if pages is None:
+        raise ValueError(
+            f"{pages_path} muss einen Schlüssel „pages“ mit einer Liste enthalten."
+        )
+    if config.get("pages"):
+        raise ValueError(
+            "Entweder „pages“ in config.yaml oder „pages_file“ — nicht beides."
+        )
+    config["pages"] = pages
+
+
+def check_body_expectations(entry: dict[str, Any], text: str) -> tuple[bool, str | None]:
+    """
+    expect_body_contains: str oder Liste — alle Teilstrings müssen vorkommen.
+    expect_body_regex: str oder Liste — jedes Muster muss mit re.search matchen.
+    """
+    raw = entry.get("expect_body_contains")
+    if raw is not None:
+        needles = [raw] if isinstance(raw, str) else list(raw)
+        for needle in needles:
+            if needle not in text:
+                return False, f"Antwort enthält nicht: {needle!r}"
+
+    regex_raw = entry.get("expect_body_regex")
+    if regex_raw is not None:
+        patterns = [regex_raw] if isinstance(regex_raw, str) else list(regex_raw)
+        for pat in patterns:
+            try:
+                if not re.search(pat, text, re.DOTALL):
+                    return False, f"Regex matched nicht: {pat!r}"
+            except re.error as e:
+                return False, f"Ungültiges Regex {pat!r}: {e}"
+
+    return True, None
 
 
 def state_path_from_config(config: dict[str, Any], config_file: Path) -> Path:
@@ -83,16 +135,17 @@ def send_pushover(
         r.raise_for_status()
 
 
-def check_page(entry: dict[str, Any], client: httpx.Client) -> CheckResult:
+def check_page(entry: dict[str, Any]) -> CheckResult:
     name = entry.get("name") or entry["url"]
     key = f"page:{name}"
     url = entry["url"]
     expect_status = int(entry.get("expect_status", 200))
     timeout = float(entry.get("timeout_seconds", 30))
-    contains = entry.get("expect_body_contains")
-
+    verify = entry.get("verify_tls", True)
+    t = httpx.Timeout(timeout)
     try:
-        r = client.get(url, timeout=timeout, follow_redirects=True)
+        with httpx.Client(timeout=t, verify=verify) as client:
+            r = client.get(url, follow_redirects=True)
     except httpx.HTTPError as e:
         return CheckResult(name, key, False, f"Anfrage fehlgeschlagen: {e}")
 
@@ -104,28 +157,27 @@ def check_page(entry: dict[str, Any], client: httpx.Client) -> CheckResult:
             f"HTTP {r.status_code}, erwartet {expect_status}",
         )
 
-    if contains is not None:
-        text = r.text
-        if contains not in text:
-            return CheckResult(
-                name,
-                key,
-                False,
-                f"Antwort enthält nicht: {contains!r}",
-            )
+    if entry.get("expect_body_contains") is not None or entry.get(
+        "expect_body_regex"
+    ) is not None:
+        ok, err = check_body_expectations(entry, r.text)
+        if not ok:
+            return CheckResult(name, key, False, err or "Inhalt ungültig")
 
     return CheckResult(name, key, True, f"HTTP {r.status_code}")
 
 
-def check_extra_http(entry: dict[str, Any], client: httpx.Client) -> CheckResult:
+def check_extra_http(entry: dict[str, Any]) -> CheckResult:
     name = entry.get("name") or entry["url"]
     key = f"extra:http:{name}"
     url = entry["url"]
     expect_status = int(entry.get("expect_status", 200))
     timeout = float(entry.get("timeout_seconds", 15))
-
+    verify = entry.get("verify_tls", True)
+    t = httpx.Timeout(timeout)
     try:
-        r = client.get(url, timeout=timeout, follow_redirects=True)
+        with httpx.Client(timeout=t, verify=verify) as client:
+            r = client.get(url, follow_redirects=True)
     except httpx.HTTPError as e:
         return CheckResult(
             name,
@@ -192,27 +244,25 @@ def check_extra_ping(entry: dict[str, Any]) -> CheckResult:
 
 def run_checks(config: dict[str, Any]) -> list[CheckResult]:
     results: list[CheckResult] = []
-    timeout = httpx.Timeout(60.0)
-    with httpx.Client(timeout=timeout) as client:
-        for p in config.get("pages") or []:
-            results.append(check_page(p, client))
+    for p in config.get("pages") or []:
+        results.append(check_page(p))
 
-        for e in config.get("extra_checks") or []:
-            t = (e.get("type") or "http").lower()
-            if t == "http":
-                results.append(check_extra_http(e, client))
-            elif t == "ping":
-                results.append(check_extra_ping(e))
-            else:
-                name = e.get("name", t)
-                results.append(
-                    CheckResult(
-                        name,
-                        f"extra:unknown:{name}",
-                        False,
-                        f"Unbekannter extra_checks type: {t}",
-                    )
+    for e in config.get("extra_checks") or []:
+        t = (e.get("type") or "http").lower()
+        if t == "http":
+            results.append(check_extra_http(e))
+        elif t == "ping":
+            results.append(check_extra_ping(e))
+        else:
+            name = e.get("name", t)
+            results.append(
+                CheckResult(
+                    name,
+                    f"extra:unknown:{name}",
+                    False,
+                    f"Unbekannter extra_checks type: {t}",
                 )
+            )
     return results
 
 
@@ -282,12 +332,18 @@ def main() -> int:
     if not config_path.exists():
         print(
             f"Konfiguration fehlt: {config_path}\n"
-            f"Kopieren Sie config.example.yaml nach config.yaml.",
+            f"Kopieren Sie config.example.yaml nach config.yaml "
+            f"und pages.example.yaml nach pages.yaml.",
             file=sys.stderr,
         )
         return 2
 
     config = load_config(config_path)
+    try:
+        merge_pages_from_file(config, config_path)
+    except (FileNotFoundError, ValueError) as e:
+        print(str(e), file=sys.stderr)
+        return 2
     po = config.get("pushover") or {}
     user_key = os.environ.get("PUSHOVER_USER_KEY") or po.get("user_key")
     api_token = os.environ.get("PUSHOVER_API_TOKEN") or po.get("api_token")
