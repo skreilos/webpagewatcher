@@ -1,6 +1,6 @@
-# Kopieren nach config.yaml. Hier nur Verbindungseinstellungen und Pfade — keine URLs.
+# Kopieren nach config.yaml. Hier nur Keys und Pfade — lokal, nicht einchecken.
 #
-# Seiten-Definition: pages.yaml (siehe pages.example.yaml)
+# Seiten: pages.yaml (liegt im Repo, gemeinsam versioniert).
 
 pushover:
   user_key: "YOUR_PUSHOVER_USER_KEY"

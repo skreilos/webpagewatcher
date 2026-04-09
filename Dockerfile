@@ -4,7 +4,7 @@ WORKDIR /app
 
 RUN apk add --no-cache iputils
 
-COPY requirements.txt monitor.py ./
+COPY requirements.txt monitor.py pages.yaml ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 ENV WEBPAGE_WATCHER_STATE_FILE=/data/state.json

@@ -1,4 +1,5 @@
-# Kopieren nach pages.yaml (neben config.yaml). Nur Seiten — keine API-Keys.
+# Überwachte Seiten (ohne Geheimnisse — liegt im Repo).
+# Keys nur in config.yaml (lokal, nicht einchecken).
 #
 # expect_body_contains: ein String ODER Liste — alle Teilstrings müssen vorkommen.
 #

@@ -1,6 +1,5 @@
 .venv/
 config.yaml
-pages.yaml
 state.json
 *.tmp
 __pycache__/

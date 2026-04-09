@@ -387,7 +387,7 @@ def main() -> int:
         print(
             f"Konfiguration fehlt: {config_path}\n"
             f"Kopieren Sie config.example.yaml nach config.yaml "
-            f"und pages.example.yaml nach pages.yaml.",
+            f"(pages.yaml kommt aus dem Repo).",
             file=sys.stderr,
         )
         return 2
