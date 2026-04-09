@@ -1,0 +1,20 @@
+services:
+  webpage-watcher:
+    build: .
+    container_name: webpage-watcher
+    restart: unless-stopped
+    volumes:
+      # config.yaml aus diesem Verzeichnis anlegen (von config.example.yaml)
+      - ./config.yaml:/app/config.yaml:ro
+      - watcher-data:/data
+    environment:
+      WEBPAGE_WATCHER_STATE_FILE: /data/state.json
+      # Optional statt Werte in config.yaml:
+      # PUSHOVER_USER_KEY: ""
+      # PUSHOVER_API_TOKEN: ""
+    # Ping-Checks: ICMP im Container (sonst extra_checks nur type: http nutzen)
+    cap_add:
+      - NET_RAW
+
+volumes:
+  watcher-data:

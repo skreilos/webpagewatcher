@@ -1,0 +1,47 @@
+# Kopieren nach config.yaml und Werte anpassen.
+# Pushover: https://pushover.net/ — User Key und App/API Token
+
+pushover:
+  user_key: "YOUR_PUSHOVER_USER_KEY"
+  api_token: "YOUR_PUSHOVER_APP_TOKEN"
+
+# Nur bei Zustandswechsel melden (empfohlen), damit nicht jede Stunde gespammt wird
+notify:
+  on_failure: true      # wenn ein Check von OK → fehlgeschlagen wechselt
+  on_recovery: true     # wenn ein Check wieder OK ist
+
+# Stündliche HTTP-Prüfungen Ihrer Seiten
+pages:
+  - name: "Startseite"
+    url: "https://example.com/"
+    expect_status: 200
+    # Optional: Seite muss diesen Text enthalten (Teilstring)
+    expect_body_contains: "Willkommen"
+    timeout_seconds: 30
+
+  - name: "Impressum"
+    url: "https://example.com/impressum"
+    expect_status: 200
+    timeout_seconds: 30
+
+# Zweiter Check-Typ (z. B. DDNS / öffentlicher Endpunkt des NUK)
+# Läuft das Skript auf dem NUK, „Server online“ von außen prüfen Sie sinnvoll per
+# HTTP auf Ihre öffentliche URL — nicht per localhost.
+#
+# type: http — GET auf eine URL
+# type: ping — ICMP (ping muss installiert sein)
+extra_checks:
+  - name: "NUK von außen erreichbar"
+    type: http
+    url: "https://ihre-ddns.example/health"
+    expect_status: 200
+    timeout_seconds: 15
+    # Ausfälle: über notify.on_failure / on_recovery (Zustandswechsel)
+    # Zusätzlich bei jedem erfolgreichen Lauf Push (stündlich): z. B. Lebenszeichen
+    # push_on_success: true
+    # (gleichwertig: notify_when: success)
+
+  # Beispiel Ping (auskommentieren falls gewünscht):
+  # - name: "Gateway"
+  #   type: ping
+  #   host: "192.168.1.1"
