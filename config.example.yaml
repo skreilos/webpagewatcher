@@ -1,4 +1,8 @@
 # Kopieren nach config.yaml und Werte anpassen.
+#
+# Welche Seiten überwacht werden: alles unter „pages“ (Liste). Jeder Eintrag mit
+# führendem „- “ ist eine eigene URL. Beliebig viele Zeilen/Einträge ergänzen.
+#
 # Pushover: https://pushover.net/ — User Key und App/API Token
 
 pushover:
@@ -10,7 +14,9 @@ notify:
   on_failure: true      # wenn ein Check von OK → fehlgeschlagen wechselt
   on_recovery: true     # wenn ein Check wieder OK ist
 
-# Stündliche HTTP-Prüfungen Ihrer Seiten
+# --- Zu überwachende Webseiten (pro Lauf / stündlich) ---
+# Pflicht pro Eintrag: url. Optional: name, expect_status (Standard 200),
+# expect_body_contains, timeout_seconds
 pages:
   - name: "Startseite"
     url: "https://example.com/"
