@@ -10,9 +10,11 @@ import argparse
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin
@@ -179,6 +181,23 @@ def send_pushover(
             },
         )
         r.raise_for_status()
+
+
+def send_startup_ping(user_key: str, api_token: str) -> None:
+    host = socket.gethostname()
+    try:
+        fqdn = socket.getfqdn()
+    except OSError:
+        fqdn = host
+    when = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %Z")
+    msg = (
+        f"WebpageWatcher ist gestartet.\n"
+        f"Host: {host}\n"
+        f"FQDN: {fqdn}\n"
+        f"Zeit: {when}\n"
+        f"Pushover-Verbindung funktioniert."
+    )
+    send_pushover(user_key, api_token, "WebpageWatcher · Start", msg)
 
 
 def check_page(entry: dict[str, Any]) -> CheckResult:
@@ -380,6 +399,11 @@ def main() -> int:
         default=Path(__file__).resolve().parent / "config.yaml",
         help="Pfad zu config.yaml",
     )
+    parser.add_argument(
+        "--startup-ping",
+        action="store_true",
+        help="Nur eine Pushover-Testnachricht senden und beenden (keine Seiten-Checks).",
+    )
     args = parser.parse_args()
     config_path: Path = args.config
 
@@ -393,11 +417,6 @@ def main() -> int:
         return 2
 
     config = load_config(config_path)
-    try:
-        merge_pages_from_file(config, config_path)
-    except (FileNotFoundError, ValueError) as e:
-        print(str(e), file=sys.stderr)
-        return 2
     po = config.get("pushover") or {}
     user_key = os.environ.get("PUSHOVER_USER_KEY") or po.get("user_key")
     api_token = os.environ.get("PUSHOVER_API_TOKEN") or po.get("api_token")
@@ -409,9 +428,30 @@ def main() -> int:
         )
         return 2
 
+    if args.startup_ping:
+        try:
+            send_startup_ping(user_key, api_token)
+        except httpx.HTTPError as e:
+            print(f"Pushover (Startup): {e}", file=sys.stderr)
+            return 1
+        print("Startup-Pushover gesendet.")
+        return 0
+
+    try:
+        merge_pages_from_file(config, config_path)
+    except (FileNotFoundError, ValueError) as e:
+        print(str(e), file=sys.stderr)
+        return 2
+
     state_file = state_path_from_config(config, config_path)
     prev = load_state(state_file)
     notify_cfg = config.get("notify") or {}
+
+    if notify_cfg.get("on_startup"):
+        try:
+            send_startup_ping(user_key, api_token)
+        except httpx.HTTPError as e:
+            print(f"Pushover (Startup): {e}", file=sys.stderr)
 
     results = run_checks(config)
     messages, new_state = decide_notifications(results, prev, notify_cfg)

@@ -8,6 +8,8 @@ Type=oneshot
 # Installationspfad anpassen:
 WorkingDirectory=/opt/webpage-watcher
 # pages.yaml liegt im gleichen Verzeichnis wie config.yaml (siehe pages_file in config)
+# Optional: einmal Pushover-Test (oder notify.on_startup in config.yaml)
+# ExecStartPre=/opt/webpage-watcher/.venv/bin/python /opt/webpage-watcher/monitor.py -c /opt/webpage-watcher/config.yaml --startup-ping
 ExecStart=/opt/webpage-watcher/.venv/bin/python /opt/webpage-watcher/monitor.py -c /opt/webpage-watcher/config.yaml
 # Optional: Geheimnisse nur per Umgebung
 # EnvironmentFile=/etc/webpage-watcher.env
