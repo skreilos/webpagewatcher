@@ -2,7 +2,7 @@ FROM python:3.12-alpine
 
 WORKDIR /app
 
-RUN apk add --no-cache iputils tzdata
+RUN apk add --no-cache ca-certificates iputils tzdata
 
 COPY requirements.txt monitor.py pages.yaml ./
 RUN pip install --no-cache-dir -r requirements.txt
