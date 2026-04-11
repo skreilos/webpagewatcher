@@ -29,8 +29,9 @@ pages_file: pages.yaml
 
 # Zweiter Check-Typ (optional)
 extra_checks:
+  # Home Assistant via Cloudflare: /api/ gibt 401 zurück (kein Token) — beweist, dass HA läuft.
   - name: "NUK von außen erreichbar"
     type: http
-    url: "https://ihre-ddns.example/health"
-    expect_status: 200
+    url: "https://home.the-force.ch/api/"
+    expect_status: 401
     timeout_seconds: 15
