@@ -20,6 +20,7 @@ from typing import Any
 from urllib.parse import urljoin
 from zoneinfo import ZoneInfo
 
+import certifi
 import httpx
 import yaml
 
@@ -256,13 +257,21 @@ def send_startup_status(
     send_pushover(user_key, api_token, "WebpageWatcher · Start", msg)
 
 
+def _ssl_verify(entry: dict[str, Any]) -> bool | str:
+    """Returns certifi CA bundle path for TLS=True, False to skip verification."""
+    v = entry.get("verify_tls", True)
+    if v is False:
+        return False
+    return certifi.where()
+
+
 def check_page(entry: dict[str, Any]) -> CheckResult:
     name = entry.get("name") or entry["url"]
     key = f"page:{name}"
     url = entry["url"]
     expect_status = int(entry.get("expect_status", 200))
     timeout = float(entry.get("timeout_seconds", 30))
-    verify = entry.get("verify_tls", True)
+    verify = _ssl_verify(entry)
     t = httpx.Timeout(timeout)
     try:
         with httpx.Client(timeout=t, verify=verify) as client:
@@ -298,7 +307,7 @@ def check_extra_http(entry: dict[str, Any]) -> CheckResult:
     url = entry["url"]
     expect_status = int(entry.get("expect_status", 200))
     timeout = float(entry.get("timeout_seconds", 15))
-    verify = entry.get("verify_tls", True)
+    verify = _ssl_verify(entry)
     t = httpx.Timeout(timeout)
     try:
         with httpx.Client(timeout=t, verify=verify) as client:
