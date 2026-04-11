@@ -7,6 +7,7 @@ services:
       - ./config.yaml:/app/config.yaml:ro
       - ./pages.yaml:/app/pages.yaml:ro
       - watcher-data:/data
+      - /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro
     environment:
       WEBPAGE_WATCHER_STATE_FILE: /data/state.json
       WEBPAGE_WATCHER_INTERVAL_SECONDS: "900"
