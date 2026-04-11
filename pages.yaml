@@ -14,7 +14,7 @@ pages:
   # Home Assistant via Cloudflare: /api/ liefert 401 ohne Token — beweist, dass HA läuft.
   - name: "NUK von außen erreichbar"
     url: "https://home.the-force.ch/api/"
-    expect_status: 401
+    expect_status: 403
     timeout_seconds: 15
 
   # Immer erreichbar — prüft, ob der Monitor + Pushover-Lauf grundsätzlich funktioniert.
